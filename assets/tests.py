@@ -2,8 +2,5 @@ from django.test import TestCase
 
 # Create your tests here.
 
-dic = {"a":1, "b":2}
-c = dic.get("c")
-
-if not c:
-    print(1)
+dict1 = {"a":[]}
+dict1['a'].append([1,2,3])

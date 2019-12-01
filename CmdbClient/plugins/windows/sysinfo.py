@@ -87,16 +87,16 @@ class Win32Infro(object):
             # print(disk.Model,disk.Size,disk.DeviceID,disk.Name,disk.Index,disk.SerialNumber,disk.SystemName,disk.Description)
             item_data = {}
             iface_choices = ["SAS", "SCST", "SATA"]
-            for iface in iface_choices:
-                if iface in disk.Model:
-                    item_data["iface"] = iface
+            for iface_type in iface_choices:
+                if iface_type in disk.Model:
+                    item_data["iface"] = iface_type
                 else:
-                    item_data["iface"] = "unkown"
-                item_data["solt"] = disk.Index
+                    item_data["iface_type"] = "unkown"
+                item_data["slot"] = disk.Index
                 item_data["sn"] = disk.SerialNumber
                 item_data["model"] = disk.Model
                 item_data["manufactory"] = disk.Manufacturer
-                item_data["capactiy"] = int(disk.Size) / (1024 * 1024 * 1024)
+                item_data["capacity"] = int(disk.Size) / (1024 * 1024 * 1024)
                 data.append(item_data)
             # [print(i) for i in data]
             return {"physical_disk": data}

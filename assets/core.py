@@ -41,6 +41,7 @@ class Asset(object):
                 self.asset_obj = models.Asset.objects.get(id=int(data['asset_id']), sn=data['sn'])
             else:
                 self.asset_obj = models.Asset.objects.get(sn=data['sn'])
+            return True
         except ObjectDoesNotExist as e:
             self.response_msg('error', 'AssetDataInvalid',
                               "Cannot find asset object in DB using asset id[%s] and sn[%s]" % (
@@ -53,10 +54,10 @@ class Asset(object):
         if data:
             try:
                 data = json.loads(data)
-                if self.mandatory_check(data, only_check_sn=True):  # 条件为真说你该条资产已存在，只需要给客户端返回一个asset_id
+                if self.mandatory_check(data, only_check_sn=True):  # if the asset is already exist in db,just return is's asset id to client
                     response = {"asset_id": self.asset_obj.id}
                 else:
-                    if hasattr(self, "waiting_approval"):
+                    if hasattr(self, "waiting_approval"): # 否则就是为新资产需要存入待批准区
                         response = {'need_aproval': "this is new asset,need IT admin approval to create new asset"}
                         self.clean_data = data
                         self.save_new_asset_to_approval_zone()
@@ -94,11 +95,11 @@ class Asset(object):
     def data_is_valid_without_id(self):
         '''审批资产入库，首先在在Asset生成一条记录，取到asset id'''
         data = self.requset.POST.get('asset_data')
-        print('data:',type(data))
+        print('data:', type(data))
         if data:
-            # try:
+            try:
                 data = json.loads(data)
-                print('sn:', data.get('sn'))
+                # print('sn:', data.get('sn'))
                 asset_obj = models.Asset.objects.get_or_create(sn=data.get('sn'), name=data.get('sn'))
                 data['asset_id'] = asset_obj[0].id
                 self.mandatory_check(data)
@@ -106,9 +107,11 @@ class Asset(object):
                 # print('厂商--:', self.clean_data.get('manufactory'))
                 if not self.response["error"]:
                     return True
-            # except ValueError as e:
-            #     # self.response_msg('error', 'AssetDataInvalid', str(e))
-            #     print(e)
+                else:
+                    return False
+            except ValueError as e:
+                self.response_msg('error', 'AssetDataInvalid', str(e))
+                # print(e)
         else:
             self.response_msg('error', 'AssetDataInvalid', "The reported asset data is not valid or provided")
 
@@ -125,7 +128,7 @@ class Asset(object):
             self.create_asset()  # 创建新资产
         else:
             print('\033[33;1m---asset already exist ,going to update----\033[0m')
-            # self.update_asset()
+            self.update_asset()
 
     def create_asset(self):
         func = getattr(self, '_create_%s' % self.clean_data['asset_type'])
@@ -150,12 +153,18 @@ class Asset(object):
                                   filed_key, data_set))
 
     def _update_server(self):
-        nic = self.__update_asset_component(data_source=self.clean_data.get['nic'],
+        nic = self.__update_asset_component(data_source=self.clean_data.get('nic'),
                                             fk='nic_set',
                                             update_fileds=['name', 'sn', 'model', 'macaddress', 'ipaddress', 'netmask',
                                                            'bonding'],
                                             identify_field='macaddress'
                                             )
+        ram = self.__update_asset_component(data_source=self.clean_data.get('ram'), fk='ram_set',
+                                            update_fileds=['slot','sn','model','capacity'],
+                                            identify_field='slot')
+        disk = self.__update_asset_component(data_source=self.clean_data.get('physical_disk'), fk='disk_set',
+                                             update_fileds=['slot','sn','model','manufactory','capacity','iface_type'],
+                                             identify_field='slot')
 
     def _create_server(self):
         self.__create_server_info()
@@ -229,26 +238,26 @@ class Asset(object):
             for disk_item in disk_info:
                 # try:
                 #     print(disk_item)
-                #     print("capacity--==", disk_item.get("capactiy"), type(disk_item.get("capactiy")))
-                    self.__verify_field(disk_item, "solt", str)
-                    self.__verify_field(disk_item, "capactiy", float)
-                    self.__verify_field(disk_item, "iface", str)
-                    self.__verify_field(disk_item, "model", str)
-                    if not len(self.response['error']) or igone_errs:
-                        data_set = {
-                            "asset_id": self.asset_obj.id,
-                            "sn": disk_item.get("sn"),
-                            "slot": disk_item.get("solt"),
-                            "capacity": disk_item.get('capactiy'),
-                            "iface_type": disk_item.get('iface'),
-                            "model": disk_item.get('model'),
-                            "manufactory": disk_item.get('manufactory')
-                        }
-                        print("data_set:", data_set)
-                        obj = models.Disk(**data_set)
-                        obj.save()
-                # except Exception as e:
-                #     self.response_msg('error', 'ObjectCreationException', 'Object [disk] %s' % str(e))
+                #     print("capacity--==", disk_item.get("capacity"), type(disk_item.get("capacity")))
+                self.__verify_field(disk_item, "slot", str)
+                self.__verify_field(disk_item, "capacity", float)
+                self.__verify_field(disk_item, "iface_type", str)
+                self.__verify_field(disk_item, "model", str)
+                if not len(self.response['error']) or igone_errs:
+                    data_set = {
+                        "asset_id": self.asset_obj.id,
+
+                        "sn": disk_item.get("sn"),
+                        "slot": disk_item.get("slot"),
+                        "capacity": disk_item.get('capacity'),"iface_type": disk_item.get('iface_type'),
+                        "model": disk_item.get('model'),
+                        "manufactory": disk_item.get('manufactory')
+                    }
+                    print("data_set:", data_set)
+                    obj = models.Disk(**data_set)
+                    obj.save()
+            # except Exception as e:
+            #     self.response_msg('error', 'ObjectCreationException', 'Object [disk] %s' % str(e))
         else:
             self.response_msg('error', 'LackOfData', 'Disk info is not provied in your reporting data')
 
@@ -335,10 +344,36 @@ class Asset(object):
                         self.response_msg("error", "AssetUpdateWarning",
                                           "Cannot find any matches in source data by using key field val [%s],"
                                           "component data is missing in reporting data!" % (key_field_data))
+                self.__filter_add_or_deleted_components(model_obj_name=component_obj.model._meta.object_name,
+                                                        data_from_db=objects_from_db,
+                                                        data_source=data_source,
+                                                        identify_field=identify_field)
             else:
                 pass
         except ValueError as e:
             print('\033[41;1m%s\033[0m' % str(e))
+
+    def __filter_add_or_deleted_components(self, model_obj_name, data_from_db, data_source, identify_field):
+        '''该函数是实现对客户端汇报过来的网卡信息进行增添和删除功能，当客户端的macaddress和数据库中不匹配，分为两种情况
+            一是客户端的mac地址在数据库中找不到，那么久进行添加。二，数据库中的mac在客户端汇报的资产中查询不到，就把数据库中的删除
+        '''
+        data_source_key_list = []
+        # print('identify_field--', identify_field)
+        for data in data_source:
+            # print('增加删除时候data--', data)
+            data_source_key_list.append(data.get(identify_field))
+            # print('data_source_key_list--==:', data_source_key_list)
+        data_source_key_list = set(data_source_key_list)
+        data_from_db_val_identify = set([getattr(obj, identify_field) for obj in data_from_db])
+        # 用集合set 求差集的方式来取出分别不同的数据
+        data_only_in_db = data_from_db_val_identify - data_source_key_list  # 需要删除db中的对应的网卡
+        data_only_in_data = data_source_key_list - data_from_db_val_identify  # 需要增加的网卡
+        print('\033[31;1mdata_only_in_db:\033[0m', data_only_in_db)
+        print('\033[31;1mdata_only_in_data source:\033[0m', data_only_in_data)
+        # if data_only_in_db:
+        self.__delete_componet(data_from_db, data_only_in_db, identify_field)
+        if data_only_in_data:
+            self.__add_components(model_obj_name, data_source, data_only_in_data, identify_field)
 
     def __compare_component(self, model_obj, fields_from_db, data_source):
         '''
@@ -367,16 +402,56 @@ class Asset(object):
                     log_msg = "Asset[%s] --> component[%s] --> field[%s] has changed from [%s] to [%s]" % (
                         self.asset_obj, model_obj, field, val_from_db, val_data_source)
                     self.response_msg('info', 'FieldChanged', log_msg)
-                    self.log_handler(self.asset_obj, 'FieldChanged', self.response.user, log_msg, model_obj)
+                    self.log_handler(self.asset_obj, 'FieldChanged', self.requset.user, log_msg, )
             else:
                 self.response_msg('warning', 'AssetUpdateWarning',
                                   "Asset component [%s]'s field [%s] is not provided in reporting data " % (
                                       model_obj, field))
         model_obj.save()
 
-    def log_handler(asset_obj, event_name, user, detail, component=None):
+    def __add_components(self, model_obj_name, all_component, add_list, identify_field):
+        create_list = []
+        model_class = getattr(models, model_obj_name)
+        print('model_class:', model_class)
+        print('--add component list:', add_list)
+        print('all_component:', all_component)
+        for data in all_component:
+            if data.get(identify_field) in add_list:
+                create_list.append(data)
+
+        for create_component in create_list:
+            data_set = {}
+            for field in model_class.auto_create_fields:
+                data_set[field] = create_component.get(field)
+            data_set['asset_id'] = self.asset_obj.id
+            print('ADD_DISK_INFO', data_set)
+            obj = model_class(**data_set)
+            obj.save()
+            print('\033[32;1mCreated component with data:\033[0m', data_set)
+            log_msg = "Asset[%s] --> component[%s] has justed added a new item [%s]" % (
+                self.asset_obj, model_obj_name, data_set)
+            self.response_msg('info', 'NewComponentAdded', log_msg)
+            self.log_handler(self.asset_obj, 'NewComponentAdded', self.requset.user, log_msg, model_obj_name)
+
+    def __delete_componet(self, all_componet, delete_list, identify_field):
+        '''在delete_list中的都会被删除'''
+        print('--deleting components', delete_list, identify_field)
+        delete_obj_list = []
+        for obj in all_componet:
+            val = getattr(obj, identify_field)
+            if val in delete_list:
+                delete_obj_list.append(obj)
+        print('delete_obj_list--==--', delete_obj_list)
+        for q in delete_obj_list:
+            log_msg = "Asset[%s] --> component[%s] --> is lacking from reporting source data, " \
+                      "assume it has been removed or replaced,will also delete it from DB" % (self.asset_obj, q)
+            self.log_handler(self.asset_obj, 'HardwareChanges', self.requset.user, log_msg)
+            q.delete()
+            print('删除成功')
+
+    def log_handler(self, asset_obj, event_name, user, detail, component=None):
         '''操作日志记录'''
-        '''    (1,u'硬件变更'),
+        ''' (1,u'硬件变更'),
             (2,u'新增配件'),
             (3,u'设备下线'),
             (4,u'设备上线'),'''
@@ -384,6 +459,7 @@ class Asset(object):
             1: ['FieldChanged', 'HardwareChanges'],
             2: ['NewComponentAdded'],
         }
+        print("user_id--=", user)
         if not user.id:
             user = models.UserProfile.objects.filter(is_superuser=True).last()
         event_type = None

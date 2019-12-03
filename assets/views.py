@@ -38,3 +38,12 @@ def new_assets_approval(request):
         ids_list = ids.split(",")
         new_assets = models.NewAssetApprovalZone.objects.filter(id__in=ids_list)
         return render(request, "assets/new_assets_approval.html", {"new_assets": new_assets})
+
+def asset_report(request):
+    '''不为新资产直接存入正式库中，客户端携带asset id'''
+    if request.method == 'POST':
+        ass_handler = Asset(request)
+        if ass_handler.data_is_valid():
+            ass_handler.data_inject()
+        return HttpResponse(json.dumps(ass_handler.response))
+    return HttpResponse('xxxxxx')

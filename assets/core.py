@@ -130,6 +130,20 @@ class Asset(object):
             print('\033[33;1m---asset already exist ,going to update----\033[0m')
             self.update_asset()
 
+    def data_is_valid(self):
+        data = self.requset.POST.get('asset_data')
+        if data:
+            try:
+                data = json.loads(data)
+                self.mandatory_check(data)
+                self.clean_data = data
+                if not self.response['error']:
+                    return True
+            except ValueError as e:
+                self.response_msg('error', 'AssetDataInvalid', str(e))
+        else:
+            self.response_msg('error', 'AssetDataInvalid', "The reported asset data is not valid or provided")
+
     def create_asset(self):
         func = getattr(self, '_create_%s' % self.clean_data['asset_type'])
         create_obj = func()
